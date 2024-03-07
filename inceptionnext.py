@@ -367,15 +367,3 @@ def inceptionnext_base_384(pretrained=False, **kwargs):
             url=model.default_cfg['url'], map_location="cpu", check_hash=True)
         model.load_state_dict(state_dict)
     return model
-
-
-if __name__ == '__main__':
-    inputs = torch.randn(1, 3, 224, 224)
-    model = inceptionnext_tiny()
-    print(model)
-    outputs = model(inputs)
-    print(outputs)
-    flops, params = profile(model, (inputs,))
-    print('flops: ', flops, 'params: ', params)
-    print("输入维度:", inputs.shape)
-    print("输出维度:", outputs.shape)
