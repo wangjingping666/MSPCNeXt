@@ -5,14 +5,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from predict import pre
 import os
-# ./weight/last1_5Block_d_1.CosineAnnealingLR=0.0001+dp=0.5.pth
+
 str_path_model = "./weight/"
-str_path_model_1 = "_3ConvNeXtPlusv1Q"
-str_path_model_2 = "_0.003OneCycleLR+dp=0.6.pth"
+str_path_model_1 = "_MSPCNEXT_V1"
+str_path_model_2 = "_0.003+0.0003+0.6.pth"
 
 
 def train_and_val(epochs, model, train_loader, len_train,val_loader, len_val,criterion, optimizer,multi_schedule,device,ema):
-# def train_and_val(epochs, model, train_loader, len_train,val_loader, len_val,criterion, optimizer,device,ema):
 
     torch.cuda.empty_cache()
     train_loss = []
@@ -39,7 +38,6 @@ def train_and_val(epochs, model, train_loader, len_train,val_loader, len_val,cri
                 output = model(image)
                 loss = criterion(output, label)
                 predict_t = torch.max(output, dim=1)[1]
-                # print(predict_t)
                 # backward
                 loss.backward()
                 optimizer.step()  # update weight
@@ -48,13 +46,11 @@ def train_and_val(epochs, model, train_loader, len_train,val_loader, len_val,cri
                     multi_schedule.step()
                 running_loss += loss.item()
                 training_acc += torch.eq(predict_t, label).sum().item()
-                # print(training_acc)
                 pbar.update(1)
+            multi_schedule.step()
 
-#             multi_schedule.step()
 
-
-        model.eval()   # 自动修改train为False
+        model.eval()
         val_losses = 0
         validation_acc = 0
         # validation loop
@@ -68,7 +64,6 @@ def train_and_val(epochs, model, train_loader, len_train,val_loader, len_val,cri
                     # loss
                     loss = criterion(output, label)
                     predict_v = torch.max(output, dim=1)[1]
-
 
                     val_losses += loss.item()
                     validation_acc += torch.eq(predict_v, label).sum().item()
@@ -86,10 +81,10 @@ def train_and_val(epochs, model, train_loader, len_train,val_loader, len_val,cri
                 best_acc_v = validation_acc / len_val
 
                 torch.save(model, str_path_model + "best" + str_path_model_1 + str_path_model_2)
-            print("第%d个epoch的学习率：%f" % (e + 1, optimizer.param_groups[0]['lr']))
+            print("learning rate for the d% epoch：%f" % (e + 1, optimizer.param_groups[0]['lr']))
 
             ac_test = pre(str_path_model + "last" + str_path_model_1 + str_path_model_2)
-            if best_acc_t < ac_test:  # 保存在测试集上最好的结果
+            if best_acc_t < ac_test:
                 best_acc_t = ac_test
 
                 torch.save(model, str_path_model + "prebest" + str_path_model_1 + str_path_model_2)
@@ -103,8 +98,6 @@ def train_and_val(epochs, model, train_loader, len_train,val_loader, len_val,cri
                   "Val Loss: {:.3f}..".format(val_losses / len_val),
                   "Time: {:.2f}s".format((time.time() - since)),
                   "Test Acc: {:.5f}..".format(best_acc_t))
-
-
 
     history = {'train_loss': train_loss, 'val_loss': val_loss ,'train_acc': train_acc, 'val_acc': val_acc}
     print('Total time: {:.2f} m'.format((time.time() - fit_time) / 60))
