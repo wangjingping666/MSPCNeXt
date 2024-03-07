@@ -106,11 +106,7 @@ class ResNet(nn.Module):
                                padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
-        # self.dropout = nn.Dropout(p=0.4)
-
-        # 网络的第一层后加入注意力机制
-        # self.ca = SKAttention(self.inplanes)
-        # print(self.inplanes)
+        self.dropout = nn.Dropout(p=0.4)
 
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, blocks_num[0])
@@ -118,8 +114,6 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, blocks_num[2], stride=2)
         self.layer4 = self._make_layer(block, 512, blocks_num[3], stride=2)
 
-        # 网络的卷积层的最后一层加入注意力机制
-        # self.ca1 = SKAttention(512 * block.expansion)   #注意改变通道数
 
         if self.include_top:
             self.avgpool = nn.AdaptiveAvgPool2d((1, 1))  # output size = (1, 1)
@@ -131,7 +125,7 @@ class ResNet(nn.Module):
 
     def _make_layer(self, block, channel, block_num, stride=1):
         downsample = None
-        #残差进行卷积的条件
+
         if stride != 1 or self.in_channel != channel * block.expansion:
             downsample = nn.Sequential(
                 nn.Conv2d(self.in_channel, channel * block.expansion, kernel_size=1, stride=stride, bias=False),
@@ -159,10 +153,6 @@ class ResNet(nn.Module):
         x = self.bn1(x)
         x = self.relu(x)
 
-        # 添加注意力机制后加的代码
-        # x = self.ca(x) * x
-        # print(x.shape)
-
         x = self.maxpool(x)
 
         x = self.layer1(x)
@@ -170,17 +160,11 @@ class ResNet(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
 
-        # # 添加注意力机制后加的代码
-        # print("a",x)
-        # print(x.shape)
-        # x = self.ca1(x) * x   #self.ca1(x)计算时要改变通道数，不然维度对不上
-        # print(x.shape)
-
 
         if self.include_top:
             x = self.avgpool(x)
             x = torch.flatten(x, 1)
-            # x =self.dropout(x)
+            x =self.dropout(x)
             x = self.fc(x)
 
         return x
@@ -222,14 +206,3 @@ def resnext101_32x8d(num_classes=10, include_top=True):
                   groups=groups,
                   width_per_group=width_per_group)
 
-
-if __name__ == '__main__':
-    inputs = torch.randn(1, 3, 224, 224)
-    model = resnet50() # CBAM模块, 可以插入CNN及任意网络中, 输入特征图in_channel的维度
-    print(model)
-    outputs = model(inputs)
-    flops, params = profile(model, (inputs,))
-    print('flops: ', flops, 'params: ', params)
-    print(outputs)
-    print("输入维度:", inputs.shape)
-    print("输出维度:", outputs.shape)
