@@ -6,50 +6,7 @@ from timm.models.registry import register_model
 from thop import profile
 
 
-"""
-Designed a BN module with BatchNorm2d and GELU
-"""
-class BN(nn.Module):
-    def __init__(self, out_channels,**kwargs):
-        super(BN, self).__init__()
-        self.bn = nn.BatchNorm2d(out_channels, eps=0.00001)
-        self.act = nn.GELU()
-    def forward(self, x):
-        x = self.bn(x)
-        x = self.act(x)
-        return x
 
-
-"""
-The 3*3 convolution block for Stage1. Adapted from ConvNeXt_Block.
-"""
-class Block_3(nn.Module):
-    def __init__(self, dim,drop_path=0.6, layer_scale_init_value=1e-6):
-        super(Block_3, self).__init__()
-        self.dwconv3_3_a1 = nn.Conv2d(dim, 96, kernel_size=(3,1), padding=(0,1), groups=96)
-        self.dwconv3_3_a2 = nn.Conv2d(96, 96, kernel_size=(1,3), padding=(1,0), groups=96)
-        self.bn1 = BN(96, eps=0.00001)    #Each branch is immediately followed by a BN module.
-        self.pwconv1 = nn.Linear(dim, 4 * dim)
-        self.act = nn.GELU()
-        self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.gamma = nn.Parameter(layer_scale_init_value * torch.ones((dim)),
-                                  requires_grad=True) if layer_scale_init_value > 0 else None
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-
-    def forward(self, x):
-        input = x
-        x = self.dwconv3_3_a1(x)
-        x = self.dwconv3_3_a2(x)
-        x = self.bn1(x)
-        x = x.permute(0, 2, 3, 1)
-        x = self.pwconv1(x)
-        x = self.act(x)
-        x = self.pwconv2(x)
-        if self.gamma is not None:
-            x = self.gamma * x
-        x = x.permute(0, 3, 1, 2)
-        x = input + self.drop_path(x)
-        return x
 
 
 # class Block_5(nn.Module):
@@ -113,84 +70,6 @@ class Block_7(nn.Module):
         x = input + self.drop_path(x)
         return x
 
-
-
-"""
-The mspcnext_v2_Block module. Contains 4 parallel branches, which are:1×1, 5×5, 9×9 and 11×11 convolutions.Large convolution kernel for factorisation.
-"""
-class mspcnext_v2_Block(nn.Module):
-    def __init__(self, dim, drop_path=0.6, layer_scale_init_value=1e-6):
-        super(mspcnext_v2_Block, self).__init__()
-        dim_d = int(dim / 4)
-        self.dwconv1_1_1 = nn.Conv2d(dim, dim_d, kernel_size=1)
-        self.bn1 = BN(dim_d, eps=0.00001)
-
-        # self.dwconv3_3_a = nn.Conv2d(dim_d, dim_d, kernel_size=3,padding=1,groups=dim_d) #, padding=3, groups=dim_d)
-        # self.bn3 = BN(dim_d, eps=0.00001)
-
-        # self.dwconv5_5_a = nn.Conv2d(dim_d, dim_d, kernel_size=5,padding=2,groups=dim_d) #, padding=3, groups=dim_d)
-        self.dwconv5_5_a1 = nn.Conv2d(dim, dim_d, kernel_size=(5, 1), padding=1, groups=dim_d)
-        self.dwconv5_5_a2 = nn.Conv2d(dim_d, dim_d, kernel_size=(1, 5), padding=1, groups=dim_d)
-        self.bn5 = BN(dim_d, eps=0.00001)     #Each branch is immediately followed by a BN module.
-
-        # self.dwconv7_7_a = nn.Conv2d(dim_d, dim_d, kernel_size=7, padding=3, groups=dim_d)
-        # self.dwconv7_7_a1 = nn.Conv2d(dim_d, dim_d, kernel_size=(7, 1), padding=1, groups=dim_d)
-        # self.dwconv7_7_a2 = nn.Conv2d(dim_d, dim_d, kernel_size=(1, 7), padding=2, groups=dim_d)
-        # self.bn7 = BN(dim_d, eps=0.00001)
-
-        # self.dwconv7_7_a = nn.Conv2d(dim_d, dim_d, kernel_size=9, padding=3, groups=dim_d)
-        self.dwconv9_9_a1 = nn.Conv2d(dim, dim_d, kernel_size=(9, 1), padding=2, groups=dim_d)
-        self.dwconv9_9_a2 = nn.Conv2d(dim_d, dim_d, kernel_size=(1, 9), padding=2, groups=dim_d)
-        self.bn9 = BN(dim_d, eps=0.00001)    #Each branch is immediately followed by a BN module.
-
-        self.dwconv11_11_b1 = nn.Conv2d(dim, dim_d, kernel_size=(11, 1), padding=2, groups=dim_d)
-        self.dwconv11_11_b2 = nn.Conv2d(dim_d, dim_d, kernel_size=(1, 11), padding=3, groups=dim_d)
-        self.bn11 = BN(dim_d, eps=0.00001)
-
-        self.pwconv1 = nn.Linear(dim, 4 * dim)
-        self.act = nn.GELU()
-        self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.gamma = nn.Parameter(layer_scale_init_value * torch.ones((dim)),
-                                  requires_grad=True) if layer_scale_init_value > 0 else None
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-
-    def forward(self, x):
-        input = x
-
-        dwconv1_1_1 = self.dwconv1_1_1(x)
-        dwconv1_1_1 = self.bn1(dwconv1_1_1)
-
-        # dwconv3_3_a = self.dwconv3_3_a(x)
-        # dwconv3_3_a1 = self.bn1(dwconv3_3_a)
-
-        dwconv5_5_a1 = self.dwconv5_5_a1(x)
-        dwconv5_5_a2 = self.dwconv5_5_a2(dwconv5_5_a1)
-        dwconv5_5_a3 = self.bn5(dwconv5_5_a2)
-
-        # dwconv7_7_a1 = self.dwconv7_7_a1(x)
-        # dwconv7_7_a2 = self.dwconv7_7_a2(dwconv7_7_a1)
-        # dwconv7_7_a3 = self.bn7(dwconv7_7_a2)
-
-        dwconv9_9_a1 = self.dwconv9_9_a1(x)
-        dwconv9_9_a2 = self.dwconv9_9_a2(dwconv9_9_a1)
-        dwconv9_9_a3 = self.bn9(dwconv9_9_a2)
-
-        dwconv11_11_b1 = self.dwconv11_11_b1(x)
-        dwconv11_11_b3 = self.dwconv11_11_b2(dwconv11_11_b1)
-        dwconv11_11_b4 = self.bn11(dwconv11_11_b3)
-
-        x = [dwconv1_1_1, dwconv5_5_a3, dwconv9_9_a3, dwconv11_11_b4]
-
-        x = torch.cat(x, 1)
-        x = x.permute(0, 2, 3, 1)
-        x = self.pwconv1(x)
-        x = self.act(x)
-        x = self.pwconv2(x)
-        if self.gamma is not None:
-            x = self.gamma * x
-        x = x.permute(0, 3, 1, 2)
-        x = input + self.drop_path(x)
-        return x
 
 
 class ConvNeXt(nn.Module):
